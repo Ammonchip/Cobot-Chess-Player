@@ -1,0 +1,178 @@
+  # begin: URCap Installation Node
+  #   Source: SCHUNK Gripper, 1.2.1, SCHUNK GmbH & Co. KG
+  #   Type: SCHUNK EGH Gripper
+  # int to ieee float
+  def IntToFloat32(in):
+   local bitArray = integer_to_binary_list(in)
+   local exponent = binary_list_to_integer([bitArray[23],bitArray[24],bitArray[25],bitArray[26],bitArray[27],bitArray[28],bitArray[29],bitArray[30]])
+   local i = 0
+   local power = -23.0
+   local total = 0.0
+   local value = 0.0
+   while (i < 23) :
+      if (bitArray[i] == True) :
+        total = total + pow(2.0, power)
+      end
+      power = power + 1.0
+      i = i + 1
+    end
+    total = total + 1.0
+    exponent = exponent - 127
+    value = pow(2.0, exponent) * total
+   if (bitArray[31] == True) :
+    value = value * -1.0
+   end
+   return value
+  end
+  
+  # timeout thread
+  global timeout = False
+  global timeoutPeriod = 4.0
+  thread timeoutThread():
+    sleep(timeoutPeriod)
+    timeout = True
+    return False
+  end
+  
+  # start timeout timer
+  def startTimeoutTimer(duration):
+    timeoutPeriod = duration
+    timeout = False
+    return (run timeoutThread())
+  end
+  
+  # Dashboard Queries
+  thread ModbusSignals_Thread():
+    enter_critical
+    modbus_add_signal("10.224.1.253", 255, 2050, 3, "MOD_FORCE_1")
+    modbus_add_signal("10.224.1.253", 255, 2051, 3, "MOD_DES_POS_H_1")
+    modbus_add_signal("10.224.1.253", 255, 2052, 3, "MOD_DES_POS_L_1")
+    modbus_add_signal("10.224.1.253", 255, 2049, 3, "MOD_CMD_1")
+    exit_critical
+    sync()
+  end
+  
+  modbus_add_signal("10.224.1.253", 255, 2049, 3, "MOD_CMD_1")
+  modbus_set_signal_update_frequency("MOD_CMD_1",20)
+  modbus_add_signal("10.224.1.253", 255, 2050, 3, "MOD_FORCE_1")
+  modbus_set_signal_update_frequency("MOD_FORCE_1",20)
+  modbus_add_signal("10.224.1.253", 255, 2051, 3, "MOD_DES_POS_H_1")
+  modbus_set_signal_update_frequency("MOD_DES_POS_H_1",20)
+  modbus_add_signal("10.224.1.253", 255, 2052, 3, "MOD_DES_POS_L_1")
+  modbus_set_signal_update_frequency("MOD_DES_POS_L_1",20)
+  modbus_add_signal("10.224.1.253", 255, 1, 2, "MOD_STATE_1")
+  modbus_set_signal_update_frequency("MOD_STATE_1",20)
+  modbus_add_signal("10.224.1.253", 255, 2, 2, "MOD_WORKPIECE_1")
+  modbus_set_signal_update_frequency("MOD_WORKPIECE_1",20)
+  modbus_add_signal("10.224.1.253", 255, 3, 2, "MOD_ACT_POS_H_1")
+  modbus_set_signal_update_frequency("MOD_ACT_POS_H_1",20)
+  modbus_add_signal("10.224.1.253", 255, 4, 2, "MOD_ACT_POS_L_1")
+  modbus_set_signal_update_frequency("MOD_ACT_POS_L_1",20)
+  # is success
+  def IOL_is_success():
+    local tmp = integer_to_binary_list (modbus_get_signal_status("MOD_STATE_1"))
+    return tmp[12]
+  end
+  
+  # is referenced
+  def IOL_is_referenced():
+    local tmp = integer_to_binary_list (modbus_get_signal_status("MOD_STATE_1"))
+    return tmp[11]
+  end
+  
+  # is referenced
+  def IOL_is_blocked():
+    local tmp = integer_to_binary_list (modbus_get_signal_status("MOD_STATE_1"))
+    return tmp[14]
+  end
+  
+  # is referenced
+  def IOL_is_end_stop():
+    local tmp = integer_to_binary_list (modbus_get_signal_status("MOD_STATE_1"))
+    return tmp[13]
+  end
+  
+  # is pos reached
+  def IOL_is_pos_reached(absPos):
+    if (norm(absPos - IOL_get_act_pos()) < 0.2) :
+       return True
+    end
+    return False
+  end
+  
+  # wait until complete
+  def IOL_wait_until_complete():
+    thrd = startTimeoutTimer(4.0)
+    while ((not IOL_is_success()) and (not timeout)):
+      sync()
+    end
+    kill thrd
+    if (timeout):
+      popup("Command not successful", "Error", False, True, blocking=True)
+    end
+  end
+  
+  # wait until referenced
+  def IOL_wait_until_referenced():
+    thrd = startTimeoutTimer(6.0)
+    while ((not IOL_is_referenced()) and (not timeout)):
+      sync()
+    end
+    kill thrd
+    if (timeout):
+      popup("Command not successful", "Error", False, True, blocking=True)
+    end
+  end
+  
+  # wait until pos reached
+  def IOL_wait_until_pos_reached(pos):
+    thrd = startTimeoutTimer(4.0)
+    while ((not IOL_is_pos_reached(pos)) and (not timeout)):
+      sync()
+    end
+    kill thrd
+    if (timeout):
+      popup("Command not successful", "Error", False, True, blocking=True)
+    end
+  end
+  
+  # IO-Link Handshake
+  def IOL_handshake():
+    local tmp = integer_to_binary_list (modbus_get_signal_status("MOD_STATE_1"))
+    thrd = startTimeoutTimer(4.0)
+    while ((not tmp[15]) and (not timeout)):
+      tmp = integer_to_binary_list (modbus_get_signal_status("MOD_STATE_1"))
+      sync()
+    end
+    while ((IOL_is_success()) and (not timeout)):
+      sync()
+    end
+    if (timeout):
+      popup("Timeout Handshake", "Error", False, True, blocking=True)
+    end
+    kill thrd
+  end
+  
+  # calc abs pos (rel movement)
+  def IOL_calc_abs_pos(relPos, maxPos, minPos):
+  local pos = IOL_get_act_pos() + relPos
+  if ((pos >= maxPos) or (pos <= minPos)) :
+     popup(str_cat("Position not reachable -> ",pos), "Error", False, True, blocking=True)
+    return 0.0
+   end
+   return pos
+  end
+  # Get operation state
+  def IOL_get_state():
+    local tmp = integer_to_binary_list (modbus_get_signal_status("MOD_STATE_1"))
+    return binary_list_to_integer ([tmp[8], tmp[9], tmp[10]])
+  end
+  
+  # Get act Pos as float [mm]
+  def IOL_get_act_pos():
+   local tmpH = modbus_get_signal_status("MOD_ACT_POS_H_1")
+   local tmpL = modbus_get_signal_status("MOD_ACT_POS_L_1")
+   return IntToFloat32((tmpH  * pow(2, 16)) + tmpL)
+  end
+  
+  # end: URCap Installation Node

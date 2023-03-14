@@ -1,0 +1,14 @@
+# begin: URCap Program Node
+#   Source: SCHUNK Gripper, 1.2.1, SCHUNK GmbH & Co. KG
+#   Type: SCHUNK EGH Gripper
+$ 2 "EGH Grip"
+modbus_set_output_register("MOD_FORCE_1",0,False)
+modbus_set_output_register("MOD_DES_POS_H_1",0,False)
+modbus_set_output_register("MOD_DES_POS_L_1",0,False)
+sleep(0.1)
+modbus_set_output_register("MOD_CMD_1",-31744,False)
+IOL_handshake()
+modbus_set_output_register("MOD_CMD_1",1024,False)
+IOL_wait_until_complete()
+sleep(0.1)
+# end: URCap Program Node

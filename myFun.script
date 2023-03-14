@@ -1,0 +1,7 @@
+def myFun():
+    while(True):
+        movel(p[-487, 308, -202, 3, -1.2, 0], a=1.2, v=0.25, t=0, r=0)
+        end
+end
+
+myFun()
