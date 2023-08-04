@@ -1,84 +1,85 @@
-import URBasic 
+import rtde_control
 import time
 from gripper import Gripper
 
-gripper = Gripper('10.224.1.253', 0) # Replace with YOUR IP adress
-host = "10.224.1.115"   #E.g. a Universal Robot offline simulator, please adjust to match your IP
-acc = 3
-vel = 3
-robotModle = URBasic.robotModel.RobotModel()
-robot = URBasic.urScriptExt.UrScriptExt(host=host,robotModel=robotModle)
-
+HOST = "10.224.1.252"   #ARM ip address
+GRIPPER = "10.224.1.253" #CLP gripper control 
+rtde_c = rtde_control.RTDEControlInterface(HOST)
+gripper = Gripper(GRIPPER) # Replace with YOUR IP adress
+gripper.grip()
+#altura em que a garra levanta 
 alto = 0.1821
+#altura que a garra abaixa
 baixo = -0.0450
+#distância de uma célula para outra
 distX = 0.0370
 distY = 0.0370
+#ponto inicial, é o ponto em que o robô começa a pegar as peças para arrumar
 pontoInicial = [-0.1965,  0.4425, alto, 2.8915, 1.2285, 0.0000]
+#ponto final, é o ponto em que o robô começa a pegar as peças do tabuleiro para "desarrumar"
 pontoFinal = [-0.3090,  0.3268, alto, 2.8915, 1.2285, 0.0000]
-
+#função pick para pegar as peças em um dado ponto variando o eixo z(subindo)
 def pick(gripper = gripper, ponto = pontoInicial, baixo = baixo, alto = alto):
     aux = ponto
     aux[2] = baixo
-    robot.movel(aux)
-    #time.sleep(1)
+    rtde_c.moveL(aux)
+    #time.sleep(3)
     gripper.grip()
-    #time.sleep(1)
+    #time.sleep(3)
     aux[2] = alto
-    robot.movel(aux)
-    #time.sleep(1)
+    rtde_c.moveL(aux)
+    #time.sleep(3)
     return aux
-
+#função move, move a TCP para um determinado ponto no plano variando o eixo x, y
 def move(gripper = gripper, ponto = pontoInicial, distX = distX, distY = distY):
     aux = ponto
-    robot.movel(aux)
-    #time.sleep(1)
+    rtde_c.moveL(aux)
+    #time.sleep(3)
     return aux
-    
+#função place para soltar a peça em um determinado ponto variando o eixo z(descendo)
 def place(gripper = gripper, ponto = pontoInicial, baixo = baixo, alto = alto):
     aux = ponto
     aux[2] = -0.0400
-    robot.movel(aux)
-    #time.sleep(1)
+    rtde_c.moveL(aux)
+    #time.sleep(3)
     gripper.set_position(40)
-    #time.sleep(1)
+    time.sleep(1)
     aux[2] = alto
-    robot.movel(aux)
-    #time.sleep(1)
+    rtde_c.moveL(aux)
+    #time.sleep(3)
     return aux
-
+#troca os pontos finais e iniciais 
 def troca(pontoInicial, pontoFinal):
     aux = pontoFinal
     pontoFinal = pontoInicial
     pontoInicial = aux
     return pontoInicial, pontoFinal
-
-pontoInicial[0] = pontoInicial[0] + (2*distX)
-pontoInicial[1] = pontoInicial[1] + (2*distY)
-pontoFinal[0] = pontoFinal[0] - (7*distX)
-pontoFinal[1] = pontoFinal[1] - (7*distY)
-
-
+'''
+#j = 1 o cobot começa a arrumar as peças de xadrez de fora para dentro do tabuleiro
+#j = 2 o cobot começa a arrumar as peças de xadrez de dentro para fora do tabuleiro
 j = 2
-
-#robot.movel(pontoInicial)
-#time.sleep(5)
+#move o braço para o ponto inicial
+rtde_c.moveL(pontoInicial)
+#inicia a posição dos dedos da garra
+gripper.set_position(40)
+time.sleep(1)
 
 while(j):
     pontoInicial = [-0.1965,  0.4425, alto, 2.8915, 1.2285, 0.0000]
     pontoFinal = [-0.3090,  0.3268, alto, 2.8915, 1.2285, 0.0000]
+    #decide se arruma ou desarruma
     if(j%2==0):
         pontoInicial, pontoFinal = troca(pontoInicial, pontoFinal)
-    robot.movel(pontoInicial)
-    time.sleep(5)
-    gripper.set_position(45)
-    time.sleep(3)
+    rtde_c.moveL(pontoInicial)
+    gripper.set_position(40)
+    time.sleep(1)
     
     #começa as brancas
     for i in range(8):
         pick(ponto=pontoInicial)
         move(ponto = pontoFinal)
         place(ponto=pontoFinal)
-
+        #condição para iniciar segunda fileira de peças brancas
         if(i==7):
             #move direita
             pontoInicial[0] = pontoInicial[0] - distX
@@ -101,7 +102,7 @@ while(j):
         pick(ponto=pontoInicial)
         move(ponto = pontoFinal)
         place(ponto=pontoFinal)
-
+        #condição para iniciar primeira fileira de peças pretas
         if(i==7):
             if (j%2==0):
                 #move direita 6 casas
@@ -119,8 +120,10 @@ while(j):
                 pontoFinal[1] = pontoFinal[1] - (6*distY)
             move(ponto=pontoInicial)
         else:
+            #move cima 
             pontoInicial[0] = pontoInicial[0] + distX
             pontoInicial[1] = pontoInicial[1] - distY
+            #move cima
             pontoFinal[0] = pontoFinal[0] + distX
             pontoFinal[1] = pontoFinal[1] - distY
             move(ponto=pontoInicial)
@@ -130,7 +133,7 @@ while(j):
         pick(ponto=pontoInicial)
         move(ponto = pontoFinal)
         place(ponto=pontoFinal)
-
+        #condição para iniciar segunda fileira de peças pretas
         if(i==7):
             if(j%2==0):
                 #move esquerda
@@ -178,24 +181,6 @@ while(j):
             pontoFinal[0] = pontoFinal[0] + distX
             pontoFinal[1] = pontoFinal[1] - distY
             move(ponto=pontoInicial)
+    #incrementa contador j
     j = j + 1 
-
-
-#gripper.set_position(40)
-#robot.movel(pose=pontoInicial, a=1.2, v=vel)
-
-"""
-pose = robot.get_actual_tcp_pose()
-time.sleep(1)
-print("Posicao atual do robo" + str(pose))
-gripper.grip()
-time.sleep(1)
-robot.movel(pose=[-0.2293,  0.4411, alto,    2.8914,  1.2285,  0.0000], a=1.2, v=vel)
-time.sleep(1)
-robot.movel(pose=[-0.5909,  0.3811,  alto,    2.8914,  1.2285,  0.0000], a=1.2, v=vel)
-time.sleep(1)
-robot.movel(pose=[-0.5909,  0.3811, baixo,    2.8914,  1.2285,  0.0000], a=1.2, v=vel)
-time.sleep(1)
-gripper.set_position(40)
-time.sleep(1)
-"""
+'''
